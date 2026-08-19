@@ -74,24 +74,19 @@ on a separate branch and fast-forwarding `master` from upstream). See the
 for the tradeoffs between the two approaches.
 
 > [!NOTE]
-> Your repo's URL will be something like this:
-> `https://github.com/<your_github_username>/kickstart.nvim.git`
+> This fork's URL is:
+> `https://github.com/shashmama/kickstart.nvim.git`
 
 You likely want to remove `nvim-pack-lock.json` from your repo's `.gitignore`
 file too - it's ignored in the kickstart repo to make maintenance easier, but
 it's recommended to track it in version control (see `:help vim.pack-lockfile`).
 
-#### Clone kickstart.nvim
-
-> [!NOTE]
-> If following the recommended step above (i.e., creating your own repo from
-> the template or fork), replace `nvim-lua` with `<your_github_username>`
-> in the commands below
+#### Clone this fork
 
 <details><summary> Linux and Mac </summary>
 
 ```sh
-git clone https://github.com/nvim-lua/kickstart.nvim.git "${XDG_CONFIG_HOME:-$HOME/.config}"/nvim
+git clone https://github.com/shashmama/kickstart.nvim.git "${XDG_CONFIG_HOME:-$HOME/.config}"/nvim
 ```
 
 </details>
@@ -101,13 +96,13 @@ git clone https://github.com/nvim-lua/kickstart.nvim.git "${XDG_CONFIG_HOME:-$HO
 If you're using `cmd.exe`:
 
 ```
-git clone https://github.com/nvim-lua/kickstart.nvim.git "%localappdata%\nvim"
+git clone https://github.com/shashmama/kickstart.nvim.git "%localappdata%\nvim"
 ```
 
 If you're using `powershell.exe`
 
 ```
-git clone https://github.com/nvim-lua/kickstart.nvim.git "${env:LOCALAPPDATA}\nvim"
+git clone https://github.com/shashmama/kickstart.nvim.git "${env:LOCALAPPDATA}\nvim"
 ```
 
 </details>
