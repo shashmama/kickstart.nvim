@@ -170,6 +170,23 @@ do
   -- instead raise a dialog asking if you wish to save the current file(s)
   -- See `:help 'confirm'`
   vim.o.confirm = true
+
+  -- Don't wrap long lines. Code is easier to scan when one screen line is one
+  -- real line; long lines run off the right edge instead of reflowing.
+  vim.o.wrap = false
+
+  -- Avro file types, none of which Neovim detects on its own.
+  --  `.avsc` (schema) and `.avpr` (protocol) are plain JSON documents, so they
+  --  get the JSON treesitter parser for free.
+  --  `.avdl` (Avro IDL) is highlighted by `syntax/avro-idl.vim`, vendored from
+  --  the Apache Avro project. There is no treesitter parser for Avro IDL.
+  vim.filetype.add {
+    extension = {
+      avsc = 'json',
+      avpr = 'json',
+      avdl = 'avro-idl',
+    },
+  }
 end
 
 -- ============================================================
@@ -239,8 +256,34 @@ do
   -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
   -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+  -- Keep the cursor centred when scrolling half a screen, and when jumping
+  -- between search results, so you re-orient less after every jump.
+  vim.keymap.set('n', '<C-d>', '<C-d>zz', { desc = 'Scroll down half a screen, centred' })
+  vim.keymap.set('n', '<C-u>', '<C-u>zz', { desc = 'Scroll up half a screen, centred' })
+  vim.keymap.set('n', 'n', 'nzzzv', { desc = 'Next search result, centred' })
+  vim.keymap.set('n', 'N', 'Nzzzv', { desc = 'Previous search result, centred' })
+
+  -- Stay in visual mode after indenting, so you can indent repeatedly
+  vim.keymap.set('v', '<', '<gv', { desc = 'Indent left, keep selection' })
+  vim.keymap.set('v', '>', '>gv', { desc = 'Indent right, keep selection' })
+
+  -- Pasting over a selection normally overwrites your clipboard with the text
+  -- that was replaced. This throws that text away instead, so the same thing
+  -- can be pasted over and over.
+  vim.keymap.set('v', 'p', '"_dP', { desc = 'Paste over selection, keeping the yank' })
+
   -- [[ Basic Autocommands ]]
   --  See `:help lua-guide-autocommands`
+
+  -- Stop Neovim continuing comment markers onto the next line when you press
+  -- Enter or use `o`. This has to be an autocmd rather than a plain option:
+  -- filetype plugins set 'formatoptions' themselves, and would overwrite a
+  -- value set once at startup.
+  vim.api.nvim_create_autocmd('FileType', {
+    desc = 'Stop auto-continuing comments on new lines',
+    group = vim.api.nvim_create_augroup('kickstart-formatoptions', { clear = true }),
+    callback = function() vim.opt_local.formatoptions:remove { 'c', 'r', 'o' } end,
+  })
 
   -- Highlight when yanking (copying) text
   --  Try it with `yap` in normal mode
@@ -389,14 +432,34 @@ do
     },
   }
 
+  vim.pack.add { gh 'wtfox/luna.nvim' }
+  require('luna').setup {
+    transparent = false,
+    accent = 1.0, -- 0-1, blends syntax accents toward grey_light; 1 = full color
+    plugins = {
+      all = true, -- enable every plugin integration unconditionally
+      auto = true, -- when plugins.all is false, autodetect via lazy.nvim (unused here: this config uses vim.pack)
+    },
+    -- Runs first, against the resolved palette, before highlight groups are built.
+    on_colors = function(colors) end,
+    -- Runs last, after all groups are built, so these take precedence.
+    on_highlights = function(highlights, colors) end,
+  }
+
   -- Load the colorscheme here.
   -- Like many other themes, this one has different styles, and you could load
   -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  vim.cmd.colorscheme 'tokyonight-night'
+  vim.cmd.colorscheme 'luna'
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
   require('todo-comments').setup { signs = false }
+
+  -- Render markdown in the buffer as you edit it: styled headings, bullets,
+  -- code blocks, tables and callouts, instead of raw `#` and backticks.
+  -- Uses the markdown treesitter parser, which is already installed.
+  vim.pack.add { gh 'MeanderingProgrammer/render-markdown.nvim' }
+  require('render-markdown').setup {}
 
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
@@ -488,17 +551,34 @@ do
   -- NOTE: You can install multiple plugins at once
   vim.pack.add(telescope_plugins)
 
+  local actions = require 'telescope.actions'
+
   -- See `:help telescope` and `:help telescope.setup()`
   require('telescope').setup {
-    -- You can put your default mappings / updates / etc. in here
-    --  All the info you're looking for is in `:help telescope.setup()`
-    --
-    -- defaults = {
-    --   mappings = {
-    --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-    --   },
-    -- },
-    -- pickers = {}
+    defaults = {
+      -- Show each filename before its directory. Without this, a list of files
+      -- from one project all start with the same long path and the part you
+      -- actually care about is pushed off the right side.
+      path_display = { filename_first = { reverse_directories = true } },
+      -- mappings = {
+      --   i = { ['<c-enter>'] = 'to_fuzzy_refine' },
+      -- },
+    },
+    pickers = {
+      find_files = {
+        hidden = true, -- include dotfiles, which are hidden by default
+        -- Build output and vendored code, which would otherwise bury real results.
+        -- These are Lua patterns, not globs, so `.` is escaped as `%.`
+        file_ignore_patterns = { '%.git/', '%.gradle/', 'build/', 'node_modules/', '%.venv/' },
+      },
+      buffers = {
+        initial_mode = 'normal', -- the list is short, so skip straight to normal mode
+        sort_lastused = true, -- most recently used buffer first
+        mappings = {
+          n = { ['d'] = actions.delete_buffer },
+        },
+      },
+    },
     extensions = {
       ['ui-select'] = { require('telescope.themes').get_dropdown() },
     },
@@ -521,6 +601,13 @@ do
   vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
   vim.keymap.set('n', '<leader>sc', builtin.commands, { desc = '[S]earch [C]ommands' })
   vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[ ] Find existing buffers' })
+
+  -- Git pickers. These all need the current directory to be inside a git repo.
+  vim.keymap.set('n', '<leader>gf', builtin.git_files, { desc = 'Search [G]it [F]iles (tracked only)' })
+  vim.keymap.set('n', '<leader>gc', builtin.git_commits, { desc = 'Search [G]it [C]ommits' })
+  vim.keymap.set('n', '<leader>gC', builtin.git_bcommits, { desc = 'Search [G]it [C]ommits for this file' })
+  vim.keymap.set('n', '<leader>gb', builtin.git_branches, { desc = 'Search [G]it [B]ranches' })
+  vim.keymap.set('n', '<leader>gs', builtin.git_status, { desc = 'Search [G]it [S]tatus (changed files)' })
 
   -- Add Telescope-based LSP pickers when an LSP attaches to a buffer.
   -- If you later switch picker plugins, this is where to update these mappings.
@@ -689,6 +776,18 @@ do
   -- Enable the following language servers
   --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
   --  See `:help lsp-config` for information about keys and how to configure
+  -- Homebrew JDK locations, used by the jdtls config below. jdtls itself must run
+  -- on JDK 21+, while our projects compile against Java 17.
+  local function jdk_home(formula)
+    local path = '/opt/homebrew/opt/' .. formula .. '/libexec/openjdk.jdk/Contents/Home'
+    return vim.uv.fs_stat(path) and path or nil
+  end
+  local jdk17, jdk21 = jdk_home 'openjdk@17', jdk_home 'openjdk@21'
+
+  local java_runtimes = {}
+  if jdk17 then table.insert(java_runtimes, { name = 'JavaSE-17', path = jdk17, default = true }) end
+  if jdk21 then table.insert(java_runtimes, { name = 'JavaSE-21', path = jdk21 }) end
+
   ---@type table<string, vim.lsp.Config>
   local servers = {
     -- clangd = {},
@@ -702,7 +801,39 @@ do
     -- But for many setups, the LSP (`ts_ls`) will work just fine
     -- ts_ls = {},
 
-    stylua = {}, -- Used to format Lua code
+    -- JSON: syntax errors, schema validation, and key completion.
+    -- Its schema catalog is attached further down, once SchemaStore.nvim is loaded.
+    jsonls = {},
+
+    -- Java: Eclipse JDT language server. Gradle/Maven projects are detected by
+    -- nvim-lspconfig's root markers, and the workspace data dir is managed by the
+    -- jdtls launcher script that Mason installs.
+    jdtls = {
+      -- NOTE: `cmd_env` pins the server to JDK 21 and is set further down, after
+      -- `mason.setup` has put the `jdtls` launcher on PATH.
+      ---@type table
+      settings = {
+        java = {
+          configuration = { runtimes = java_runtimes },
+          -- Useful for Spring Boot / Gradle codebases
+          signatureHelp = { enabled = true },
+          inlayHints = { parameterNames = { enabled = 'literals' } },
+        },
+      },
+    },
+
+    -- Python: pyright for types/completion, ruff for linting and imports.
+    pyright = {
+      settings = {
+        pyright = { disableOrganizeImports = true }, -- ruff owns import sorting
+        python = { analysis = { typeCheckingMode = 'standard' } },
+      },
+    },
+    ruff = {
+      on_attach = function(client)
+        client.server_capabilities.hoverProvider = false -- let pyright own hover
+      end,
+    },
 
     -- Special Lua Config, as recommended by neovim help docs
     lua_ls = {
@@ -742,6 +873,8 @@ do
     gh 'mason-org/mason.nvim',
     gh 'mason-org/mason-lspconfig.nvim',
     gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
+    -- Catalog of ~1400 JSON schemas from schemastore.org, used by jsonls below
+    gh 'b0o/SchemaStore.nvim',
   }
 
   -- Automatically install LSPs and related tools to stdpath for Neovim
@@ -762,9 +895,38 @@ do
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
     -- You can add other tools here that you want Mason to install
+    'stylua', -- Used to format Lua code
   })
 
   require('mason-tool-installer').setup { ensure_installed = ensure_installed }
+
+  -- Attach the schema catalog to the JSON server. This happens here rather than
+  -- in the `servers` table above, because that table is built before
+  -- `vim.pack.add` has loaded SchemaStore.nvim.
+  --
+  -- Schemas are matched by filename, so `.avsc` files automatically validate
+  -- against the published Avro schema definition.
+  -- jdtls must itself run on JDK 21+, so put that JDK ahead of the system Java
+  -- (JAVA_HOME alone is not honoured by every launcher). Done here rather than in
+  -- the `servers` table because `vim.env.PATH` only gains Mason's bin directory
+  -- once `mason.setup` above has run.
+  if jdk21 then
+    servers.jdtls.cmd_env = { JAVA_HOME = jdk21, PATH = jdk21 .. '/bin:' .. vim.env.PATH }
+  end
+
+  -- Wire up the Lombok javaagent that Mason ships alongside jdtls, but does not
+  -- enable. Without it, Lombok-generated getters/setters/builders are reported as
+  -- unresolved symbols. nvim-lspconfig reads this from Neovim's own environment
+  -- when it builds the jdtls command.
+  local lombok_jar = vim.fs.joinpath(vim.fn.stdpath 'data', 'mason', 'packages', 'jdtls', 'lombok.jar')
+  if vim.uv.fs_stat(lombok_jar) then vim.env.JDTLS_JVM_ARGS = '-javaagent:' .. lombok_jar end
+
+  servers.jsonls.settings = {
+    json = {
+      schemas = require('schemastore').json.schemas(),
+      validate = { enable = true },
+    },
+  }
 
   for name, server in pairs(servers) do
     vim.lsp.config(name, server)
@@ -798,6 +960,8 @@ do
     },
     -- You can also specify external formatters in here.
     formatters_by_ft = {
+      -- Python: ruff, matching the `ruff` language server configured above.
+      python = { 'ruff_organize_imports', 'ruff_format' },
       -- rust = { 'rustfmt' },
       -- Conform can also run multiple formatters sequentially
       -- python = { "isort", "black" },
@@ -906,7 +1070,7 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+  local parsers = { 'bash', 'c', 'diff', 'html', 'java', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'vim', 'vimdoc' }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
@@ -972,7 +1136,7 @@ do
   -- require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint'
   -- require 'kickstart.plugins.autopairs'
-  -- require 'kickstart.plugins.neo-tree'
+  require 'kickstart.plugins.neo-tree'
   -- require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
